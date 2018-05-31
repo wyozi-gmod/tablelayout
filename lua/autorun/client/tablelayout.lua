@@ -1,186 +1,606 @@
-local Cell = {}
-setmetatable(Cell, {
-	__index = Cell,
-	__call = function(...)
-		return setmetatable({}, Cell)
-	end,
-})
+-- Extremely small OOP library
+local function Class(name, parent)
+	local t = {}
 
-function Cell:SetDefaults()
-	self.minWidth = 0
-	self.minHeight = 0
-	self.prefWidth = 0
-	self.prefHeight = 0
-	self.maxWidth = 0
-	self.maxHeight = 0
-	self.spaceTop = 0
-	self.spaceLeft = 0
-	self.spaceBottom = 0
-	self.spaceRight = 0
-	self.padTop = 0
-	self.padLeft = 0
-	self.padBottom = 0
-	self.padRight = 0
-	self.fillX = 0
-	self.fillY = 0
-	self.align = FILL
-	self.expandX = 0
-	self.expandY = 0
-	self.ignore = false
-	self.colspan = 1
-	self.uniformX = nil
-	self.uniformY = nil
-end
-function Cell:Clear()
-	self.minWidth = nil
-	self.minHeight = nil
-	self.prefWidth = nil
-	self.prefHeight = nil
-	self.maxWidth = nil
-	self.maxHeight = nil
-	self.spaceTop = nil
-	self.spaceLeft = nil
-	self.spaceBottom = nil
-	self.spaceRight = nil
-	self.padTop = nil
-	self.padLeft = nil
-	self.padBottom = nil
-	self.padRight = nil
-	self.fillX = nil
-	self.fillY = nil
-	self.align = nil
-	self.expandX = nil
-	self.expandY = nil
-	self.ignore = nil
-	self.colspan = nil
-	self.uniformX = nil
-	self.uniformY = nil
+	local meta = {}
+	meta.__call = function(_, ...)
+		local inst = setmetatable({}, {__index = t})
+		if inst.initialize then inst:initialize(...) end
+		return inst
+	end
+	if parent then meta.__index = parent end
+
+	setmetatable(t, meta)
+
+	return t
 end
 
-function Cell:Set(defaults)
-	self.minWidth = defaults.minWidth
-	self.minHeight = defaults.minHeight
-	self.prefWidth = defaults.prefWidth
-	self.prefHeight = defaults.prefHeight
-	self.maxWidth = defaults.maxWidth
-	self.maxHeight = defaults.maxHeight
-	self.spaceTop = defaults.spaceTop
-	self.spaceLeft = defaults.spaceLeft
-	self.spaceBottom = defaults.spaceBottom
-	self.spaceRight = defaults.spaceRight
-	self.padTop = defaults.padTop
-	self.padLeft = defaults.padLeft
-	self.padBottom = defaults.padBottom
-	self.padRight = defaults.padRight
-	self.fillX = defaults.fillX
-	self.fillY = defaults.fillY
-	self.align = defaults.align
-	self.expandX = defaults.expandX
-	self.expandY = defaults.expandY
-	self.ignore = defaults.ignore
-	self.colspan = defaults.colspan
-	self.uniformX = defaults.uniformX
-	self.uniformY = defaults.uniformY
+local Unit = Class("Unit")
+local FixedUnit = Class("FixedUnit", Unit)
+function FixedUnit:initialize(size)
+	self.size = size
+end
+function FixedUnit:getSize(containerSize)
+	return self.size
 end
 
-function Cell:Merge(cell)
-	if (cell == null) then return end
-	if (cell.minWidth ~= nil) then self.minWidth = cell.minWidth end
-	if (cell.minHeight ~= nil) then self.minHeight = cell.minHeight end
-	if (cell.prefWidth ~= nil) then self.prefWidth = cell.prefWidth end
-	if (cell.prefHeight ~= nil) then self.prefHeight = cell.prefHeight end
-	if (cell.maxWidth ~= nil) then self.maxWidth = cell.maxWidth end
-	if (cell.maxHeight ~= nil) then self.maxHeight = cell.maxHeight end
-	if (cell.spaceTop ~= nil) then self.spaceTop = cell.spaceTop end
-	if (cell.spaceLeft ~= nil) then self.spaceLeft = cell.spaceLeft end
-	if (cell.spaceBottom ~= nil) then self.spaceBottom = cell.spaceBottom end
-	if (cell.spaceRight ~= nil) then self.spaceRight = cell.spaceRight end
-	if (cell.padTop ~= nil) then self.padTop = cell.padTop end
-	if (cell.padLeft ~= nil) then self.padLeft = cell.padLeft end
-	if (cell.padBottom ~= nil) then self.padBottom = cell.padBottom end
-	if (cell.padRight ~= nil) then self.padRight = cell.padRight end
-	if (cell.fillX ~= nil) then self.fillX = cell.fillX end
-	if (cell.fillY ~= nil) then self.fillY = cell.fillY end
-	if (cell.align ~= nil) then self.align = cell.align end
-	if (cell.expandX ~= nil) then self.expandX = cell.expandX end
-	if (cell.expandY ~= nil) then self.expandY = cell.expandY end
-	if (cell.ignore ~= nil) then self.ignore = cell.ignore end
-	if (cell.colspan ~= nil) then self.colspan = cell.colspan end
-	if (cell.uniformX ~= nil) then self.uniformX = cell.uniformX end
-	if (cell.uniformY ~= nil) then self.uniformY = cell.uniformY end
+local PercUnit = Class("PercUnit", Unit)
+function PercUnit:initialize(perc)
+	self.perc = perc
+end
+function FixedUnit:getSize(containerSize)
+	return self.perc * containerSize
 end
 
-local TABLE = {}
-
-function TABLE:Init()
-	self.cells = {}
-	self.rowDefaults = Cell()
-
-	self.columnCount = 0
-	self.rowCount = 0
+local GridDim = Class("GridDim")
+nsgui.Accessor(GridDim, "_size", "Size")
+nsgui.Accessor(GridDim, "_expanded", "Expanded")
+function GridDim:Reset()
+	self:SetSize(0)
+	self:SetExpanded(false)
 end
 
-function TABLE:Add(comp)
-	local cell = Cell()
-	cell.comp = comp
+local Row = Class("Row", GridDim)
+nsgui.Accessor(Row, "_marginTop", "MarginTop")
+nsgui.Accessor(Row, "_marginBottom", "MarginBottom")
+local Column = Class("Column", GridDim)
 
-	if #self.cells then
-		local lastCell = self.cells[#self.cells]
-		if not lastCell.endRow then
-			cell.column = lastCell.column + lastCell.colspan
-			cell.row = lastCell.row
-		else
-			cell.column = 0
-			cell.row = lastCell.row + 1
-		end
-	else
-		cell.column = 0
-		cell.row = 0
+local A_TOP =    bit.lshift(1, 1)
+local A_BOTTOM = bit.lshift(1, 2)
+local A_LEFT =   bit.lshift(1, 3)
+local A_RIGHT =  bit.lshift(1, 4)
+
+local Cell = Class("Cell")
+nsgui.Accessor(Cell, "_align", "Alignment")
+nsgui.Accessor(Cell, "_expandedX", "ExpandedX")
+nsgui.Accessor(Cell, "_expandedY", "ExpandedY")
+nsgui.Accessor(Cell, "_filledX", "FilledX")
+nsgui.Accessor(Cell, "_filledY", "FilledY")
+nsgui.Accessor(Cell, "_width", "Width")
+nsgui.Accessor(Cell, "_height", "Height")
+nsgui.Accessor(Cell, "_paddingL", "PaddingLeft")
+nsgui.Accessor(Cell, "_paddingT", "PaddingTop")
+nsgui.Accessor(Cell, "_paddingR", "PaddingRight")
+nsgui.Accessor(Cell, "_paddingB", "PaddingBottom")
+nsgui.Accessor(Cell, "_colspan", "Colspan")
+function Cell:initialize(comp)
+	self.comp = comp
+	self:Center()
+end
+function Cell:GetComponent() return self.comp end
+--- Returns the size the cell wants to be. ((specifiedSize or comp.size) + margins + paddings)
+function Cell:GetPreferredCellSize()
+	local w, h = self:GetWidth() or self:GetComponent():GetWide(), self:GetHeight() or self:GetComponent():GetTall()
+	w = w + (self:GetPaddingLeft() or 0) + (self:GetPaddingRight() or 0)
+	h = h + (self:GetPaddingTop() or 0) + (self:GetPaddingBottom() or 0)
+	return w, h
+end
+function Cell:SetPadding(x)
+	self:SetPaddingLeft(x) self:SetPaddingTop(x) self:SetPaddingRight(x) self:SetPaddingBottom(x) return self
+end
+function Cell:Expand()
+	self:SetExpandedX(true) self:SetExpandedY(true) return self
+end
+function Cell:Fill()
+	self:SetFilledX(true) self:SetFilledY(true) return self
+end
+function Cell:_SetAlignment(x, contradicting)
+	local a = self:GetAlignment()
+	a = bit.bor(a, x)
+	a = bit.band(a, bit.bnot(contradicting))
+	self:SetAlignment(a)
+	return self
+end
+function Cell:Top()
+	return self:_SetAlignment(A_TOP, A_BOTTOM)
+end
+function Cell:Bottom()
+	return self:_SetAlignment(A_BOTTOM, A_TOP)
+end
+function Cell:Right()
+	return self:_SetAlignment(A_RIGHT, A_LEFT)
+end
+function Cell:Left()
+	return self:_SetAlignment(A_LEFT, A_RIGHT)
+end
+function Cell:Center()
+	-- Garry, add lua operators please
+	self:SetAlignment(A_TOP + A_BOTTOM + A_LEFT + A_RIGHT) return self
+end
+
+function Cell:GetAlignmentFractions()
+	local alignment = self:GetAlignment()
+
+	local alignx, aligny = 0.5, 0.5
+
+	if bit.band(alignment, A_LEFT) ~= 0 and bit.band(alignment, A_RIGHT) == 0 then
+		alignx = 0
+	end
+	if bit.band(alignment, A_RIGHT) ~= 0 and bit.band(alignment, A_LEFT) == 0 then
+		alignx = 1
 	end
 
-	table.insert(self.cells, cell)
+	if bit.band(alignment, A_TOP) ~= 0 and bit.band(alignment, A_BOTTOM) == 0 then
+		aligny = 0
+	end
+	if bit.band(alignment, A_BOTTOM) ~= 0 and bit.band(alignment, A_TOP) == 0 then
+		aligny = 1
+	end
+
+	return alignx, aligny
+end
+
+local PANEL = {}
+
+nsgui.Accessor(PANEL, "_debugMode", "DebugMode", FORCE_BOOL)
+
+function PANEL:Init()
+	-- Internal cell is used for doing stuff with the logical table
+	-- It should not be accessed directly, but through exposed methods
+	self._internalCell = Cell(self)
+
+	-- Grid[RowIndex][ColumnIndex] = Cell
+	self._grid = {}
+
+	self._rows = {}
+	self._cols = {}
+
+	self:Row() -- Start first row
+end
+
+function PANEL:Top()
+	self._internalCell:Top() return self
+end
+function PANEL:Bottom()
+	self._internalCell:Bottom() return self
+end
+function PANEL:Right()
+	self._internalCell:Right() return self
+end
+function PANEL:Left()
+	self._internalCell:Left() return self
+end
+function PANEL:Center()
+	self._internalCell:Center() return self
+end
+
+function PANEL:SetPadding(x)
+	self._internalCell:SetPadding(x) return self
+end
+-- TODO individual paddings
+
+function PANEL:GetRow(i)
+	return self._rows[i or self:RowId()]
+end
+function PANEL:GetCol(i)
+	return self._cols[i]
+end
+function PANEL:GetColspannedColI(i, row)
+	local rowCols = self._grid[row]
+
+	local cursor = 0
+	for k, rowcol in ipairs(rowCols) do
+		cursor = cursor + (rowcol:GetColspan() or 1)
+
+		-- Note, if colspan is eg. 10, the cursor can easily jump over i
+		-- That's why we need a GTEQ check here instead of EQ
+		if cursor >= i then return k end
+	end
+end
+function PANEL:GetColspannedCol(i, row)
+	return self._cols[self:GetColspannedColI(i, row)]
+end
+
+function PANEL:Row()
+	local rowId = #self._rows + 1
+	self._grid[rowId] = {}
+
+	local row = Row()
+	self._rows[rowId] = row
+
+	return row
+end
+function PANEL:RowId()
+	return #self._rows
+end
+
+function PANEL:RowCount()
+	return #self._rows
+end
+function PANEL:ColCount()
+	return #self._cols
+end
+
+function PANEL:GridRow()
+	return self._grid[#self._grid]
+end
+
+function PANEL:Add(comp)
+	-- Create null component
+	if not comp then
+		comp = vgui.Create("Panel")
+	end
+
+	local row = self:GridRow()
+
+	local rowi, coli = self:RowId(), #row+1
+
+	-- Create Column object if it does not exist
+	if not self._cols[coli] then
+		self._cols[coli] = Column()
+	end
+
+	local _cell = Cell(comp)
 	comp:SetParent(self)
 
-	return cell
+	_cell.rowi = rowi
+	_cell.coli = coli
+
+	_cell.row = self._rows[rowi]
+	_cell.col = self._cols[coli]
+
+	table.insert(row, _cell)
+
+	return _cell
 end
 
-function TABLE:Row()
-	if #self.cells > 0 then
-		self:_EndRow()
+-- This computes each row and column object's size.
+-- This method should be called if any components or the table changes size
+function PANEL:ComputeSizes()
+	-- First compute non-expanded sizes and store expanded statuses
+	for c=1, self:ColCount() do
+		local col = self._cols[c]
+		col:Reset()
 	end
 
-	self.rowDefaults = Cell()
-	return self.rowDefaults
-end
-function TABLE:_EndRow()
-	local rowColumns = 0
+	for r=1, self:RowCount() do
+		local row = self:GetRow(r)
+		row:Reset()
 
-	for i=self.cells, 0, -1 do
-		local cell = self.cells[i]
-		if cell.endRow then break end
+		local rowcols = self._grid[r]
 
-		rowColumns = rowColumns + cell.colspan
+		local spannedc = 1
+		for c=1, #rowcols do
+			local cell = rowcols[c]
+			local colspan = cell:GetColspan() or 1
+
+			if cell:GetExpandedY() then
+				row:SetExpanded(true)
+			end
+
+			local cw, ch = cell:GetPreferredCellSize()
+
+			row:SetSize(math.max(row:GetSize(), ch))
+
+			-- If we need to use colspan, we shouldnt be the ones deciding column sizes and instead delegate
+			-- that to other rows. TODO this might be incorrect behavior in some situations?
+			if colspan > 1 then cw = 0 end
+
+			-- Set size/expand status for each col independently
+			for cs=0, colspan-1 do
+				local col = self:GetCol(spannedc + cs)
+
+				if cell:GetExpandedX() then
+					col:SetExpanded(true)
+				end
+				col:SetSize(math.max(col:GetSize(), cw))
+			end
+
+			spannedc = spannedc + colspan
+		end
 	end
 
-	self.columnCount = math.max(self.columnCount, rowColumns)
-	self.rowCount = self.rowCount + 1
+	-- Then compute equal shares for expanded cols/rows
 
-	self.cells[#self.cells].endRow = true
 
-	self:InvalidateLayout()
+	local ix1, iy1, ix2, iy2 = self:InternalBounds()
+	local expandSpaceX, expandSpaceY = ix2-ix1, iy2-iy1 -- the space available for expanding
+	local expandNumX, expandNumY = 0, 0 -- the number of expanders per dimension
+
+	for c=1, self:ColCount() do
+		local col = self._cols[c]
+
+		if col:GetExpanded() then
+			expandNumX = expandNumX + 1
+		else
+			expandSpaceX = expandSpaceX - col:GetSize()
+		end
+	end
+	for r=1, self:RowCount() do
+		local row = self._rows[r]
+
+		if row:GetExpanded() then
+			expandNumY = expandNumY + 1
+		else
+			expandSpaceY = expandSpaceY - row:GetSize()
+		end
+	end
+
+	if expandNumX > 0 then
+		local expandSpacePer = expandSpaceX / expandNumX
+
+		for c=1, self:ColCount() do
+			local col = self._cols[c]
+
+			if col:GetExpanded() then
+				col:SetSize(expandSpacePer)
+			end
+		end
+	end
+	if expandNumY > 0 then
+		local expandSpacePer = expandSpaceY / expandNumY
+
+		for r=1, self:RowCount() do
+			local row = self._rows[r]
+
+			if row:GetExpanded() then
+				row:SetSize(expandSpacePer)
+			end
+		end
+	end
 end
 
-function TABLE:PerformLayout()
-	self:LayoutTable(0, 0, self:GetWide(), self:GetTall())
+-- Returns bounds decreased by paddings
+function PANEL:InternalBounds()
+	local x1, y1, x2, y2 = 0, 0, self:GetWide(), self:GetTall()
+
+	x1 = x1 + (self._internalCell:GetPaddingLeft() or 0)
+	y1 = y1 + (self._internalCell:GetPaddingTop() or 0)
+
+	x2 = x2 - (self._internalCell:GetPaddingRight() or 0)
+	y2 = y2 - (self._internalCell:GetPaddingBottom() or 0)
+
+	return x1, y1, x2, y2
 end
 
-function TABLE:LayoutTable(lx, ly, lw, lh)
-
+-- Compute the size of the logical table
+function PANEL:ComputeLogicalSize()
+	local logicalWidth, logicalHeight = 0, 0
+	for c=1, self:ColCount() do
+		logicalWidth = logicalWidth + self:GetCol(c):GetSize()
+	end
+	for r=1, self:RowCount() do
+		logicalHeight = logicalHeight + self:GetRow(r):GetSize()
+	end
+	return logicalWidth, logicalHeight
 end
 
-vgui.Register("WTable", TABLE, "Panel")
+function PANEL:ComputeLogicalXY()
+	local ix, iy, ix2, iy2 = self:InternalBounds()
+	local logicalWidth, logicalHeight = self:ComputeLogicalSize()
 
-if IsValid(WTABLEDEBUG) then WTABLEDEBUG:Remove() end
-WTABLEDEBUG = vgui.Create("WTable")
-WTABLEDEBUG:SetPos(0, 0)
-WTABLEDEBUG:SetSize(512, 512)
+	local logicalAlignX, logicalAlignY = self._internalCell:GetAlignmentFractions()
+	local logicalMidX, logicalMidY = Lerp(logicalAlignX, ix, ix2), Lerp(logicalAlignY, iy, iy2)
+	local xStart, yStart = math.Clamp(logicalMidX-logicalWidth/2, ix, ix2-logicalWidth),
+						   math.Clamp(logicalMidY-logicalHeight/2, iy, iy2-logicalHeight)
+
+	return xStart, yStart
+end
+
+-- Note: colspanned cells are visited once no matter how large the colspan is
+function PANEL:ForEachCell(eachCell, after)
+	local param = {} -- save some memory
+
+	local ix, iy, ix2, iy2 = self:InternalBounds()
+	local logicalWidth, logicalHeight = self:ComputeLogicalSize()
+	local xStart, yStart = self:ComputeLogicalXY()
+
+	param.ix, param.iy, param.ix2, param.iy2 = ix, iy, ix2, iy2
+	param.logicalWidth = logicalWidth
+	param.logicalHeight = logicalHeight
+	param.xStart = xStart
+	param.yStart = yStart
+
+	local y = 0
+	for r=1, self:RowCount() do
+		local row = self._rows[r]
+		local rowSize = row:GetSize()
+
+		param.row = row
+		param.rowSize = rowSize
+
+		y = y + (row:GetMarginTop() or 0)
+		param.y = y
+
+		local rowcols = self._grid[r]
+
+		local x = 0
+
+		-- c is the col index in CURRENT row only
+		-- spannedc is c that accounts for colspans and can be used for global columns
+		local spannedc = 1
+		for c=1, #rowcols do
+			param.x = x
+
+			local cell = self._grid[r][c]
+			local comp = cell:GetComponent()
+			param.cell, param.comp = cell, comp
+
+			local colspan = (cell:GetColspan() or 1)
+			param.colspan = colspan
+
+			local colSize = 0
+			local cellCol = 0
+			while cellCol < colspan do
+				local col = self:GetCol(spannedc + cellCol)
+				colSize = colSize + col:GetSize()
+
+				cellCol = cellCol + 1
+			end
+			spannedc = spannedc + cellCol
+
+			param.colSize = colSize
+
+			-- The absolute cell corner values
+			local cellx, celly, cellw, cellh = xStart + x, yStart + y, colSize, rowSize
+			param.cellx, param.celly, param.cellw, param.cellh = cellx, celly, cellw, cellh
+
+			-- The internal (affected by padding) cell values
+			local icellx1, icelly1 = cellx + (cell:GetPaddingLeft() or 0), celly + (cell:GetPaddingTop() or 0)
+			param.icellx1, param.icelly1 = icellx1, icelly1
+			local icellx2, icelly2 = cellx + cellw - (cell:GetPaddingRight() or 0), celly + cellh - (cell:GetPaddingBottom() or 0)
+			param.icellx2, param.icelly2 = icellx2, icelly2
+
+			local compw, comph = comp:GetWide(), comp:GetTall()
+			if cell:GetFilledX() then
+				compw = (icellx2 - icellx1)
+			end
+			if cell:GetFilledY() then
+				comph = (icelly2 - icelly1)
+			end
+			param.compW, param.compH = compw, comph
+
+			-- Map normalized alignment values to internal cell's coordinates
+			local alignx, aligny = cell:GetAlignmentFractions()
+			local midX, midY = Lerp(alignx, icellx1, icellx2), Lerp(aligny, icelly1, icelly2)
+			param.midX, param.midY = midX, midY
+
+			-- Clamp mid values.
+			-- If this part is skipped, components will "overflow" by 50%, because alignx/aligny
+			-- are normalized scalar values for comp's middle position, not edge position
+			local compx, compy = math.Clamp(midX-compw/2, icellx1, icellx2-compw), math.Clamp(midY-comph/2, icelly1, icelly2-comph)
+			param.compX, param.compY = compx, compy
+
+			if eachCell then
+				eachCell(param)
+			end
+
+			x = x + colSize
+		end
+
+		y = y + rowSize + (row:GetMarginBottom() or 0)
+	end
+
+	if after then
+		after(param)
+	end
+end
+
+function PANEL:PerformLayout()
+	self:ComputeSizes()
+
+	self:ForEachCell(function(data)
+		data.comp:SetPos(data.compX, data.compY)
+		data.comp:SetSize(data.compW, data.compH)
+	end)
+end
+
+function PANEL:PaintOver()
+	if not self:IsDebugMode() then return end
+
+
+	self:ForEachCell(function(data)
+		-- Draw component
+		surface.SetDrawColor(0, 255, 0)
+		surface.DrawOutlinedRect(data.compX, data.compY, data.compW, data.compH)
+
+		-- Draw inner cell
+		surface.SetDrawColor(0, 0, 255)
+		surface.DrawOutlinedRect(data.icellx1, data.icelly1, data.icellx2-data.icellx1, data.icelly2-data.icelly1)
+
+		-- Draw cell
+		surface.SetDrawColor(255, 0, 0)
+		surface.DrawOutlinedRect(data.cellx, data.celly, data.cellw, data.cellh)
+	end, function(data)
+		-- Draw logical table
+		surface.SetDrawColor(255, 127, 0)
+		surface.DrawOutlinedRect(data.xStart, data.yStart, data.logicalWidth, data.logicalHeight)
+
+		-- Draw internal cell
+		surface.SetDrawColor(0, 127, 255)
+		surface.DrawOutlinedRect(data.ix, data.iy, data.ix2-data.ix, data.iy2-data.iy)
+	end)
+end
+
+nsgui.Register("NSTable", PANEL, "Panel")
+
+concommand.Add("nsgui.TestTable", function(ply, cmd, args)
+	local comp = nsgui.TestComp("NSTable")
+
+	local function Label(txt)
+		local l = vgui.Create("DLabel")
+		l:SetText(txt)
+		l:SizeToContents()
+		l:SetTextColor(Color(0, 0, 0))
+		return l
+	end
+	local function Button(txt)
+		local l = vgui.Create("NSButton")
+		l:SetText(txt)
+		l:SizeToContents()
+		return l
+	end
+	local le
+	local function Entry()
+		le = vgui.Create("NSTextEntry")
+		return le
+	end
+	local function Validator(fn)
+		local val = vgui.Create("DImage")
+
+		local entry = le
+		val.Think = function(pself)
+			local validated = fn(entry:GetText())
+			pself:SetImage(validated and "icon16/accept.png" or "icon16/cross.png")
+		end
+
+		val:SetSize(16, 16)
+
+		return val
+	end
+
+	local testidx = args[1]
+
+	if testidx == "colspan" then
+		comp:SetPadding(50)
+
+		comp:Add(Label("Row1Col1"))
+		comp:Add(Label("Row1Col2"))
+		comp:Add(Label("Row1Col3"))
+		comp:Add(Label("Row1Col4"))
+		comp:Row()
+
+		comp:Add(Label("Row2Col1"))
+		comp:Add(Label("Row2Col2Span2")):SetColspan(2):Expand()
+		comp:Add(Label("Row2Col4"))
+		comp:Row()
+
+		comp:Add(Label("Row3Col1"))
+		comp:Add(Label("Row3Col2"))
+		comp:Add(Label("Row3Col3"))
+		comp:Add(Label("Row3Col4"))
+	elseif testidx == "plylist" then
+		comp:SetPadding(10)
+		comp:Top()
+
+		comp:Add(Label("Name:")):SetWidth(100)
+		comp:Add(Entry()):Fill():SetExpandedX(true)
+		comp:Add(Validator(function(txt) return string.len(txt) >= 3 end)):SetWidth(25)
+		comp:Row():SetMarginTop(10)
+
+		comp:Add(Label("Age:"))
+		comp:Add(Entry()):Fill()
+		comp:Add(Validator(function(txt) return string.match(txt, "%d+") end))
+		comp:Row():SetMarginTop(10)
+
+		comp:Add(Label("Color:"))
+		local clr = vgui.Create("DColorCombo")
+		comp:Add(clr):Fill():SetHeight(200):SetColspan(2)
+		comp:Row():SetMarginTop(10)
+
+		comp:Add(Button("Accept")):SetFilledX(true)
+		comp:Add():SetColspan(2)
+	else
+		comp:Right():SetPadding(50)
+
+		comp:Add(Label("Hello")):Right():Bottom():SetPaddingBottom(15):SetPaddingRight(100)
+		comp:Add(Label("World")):SetPadding(5):Left()
+		comp:Row()
+
+		comp:Add(Label("What's")):Fill()
+		comp:Add(Label(string.rep("swag", 3))):SetPadding(5):SetPaddingTop(2):Top()
+	end
+
+	comp:SetDebugMode(true)
+	--timer.Simple(0.05, function() comp:Remove() end)
+end)
